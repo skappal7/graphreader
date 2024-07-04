@@ -7,82 +7,89 @@ import pandas as pd
 from datetime import datetime
 import re
 
-def extract_text_and_data(image):
+def detect_chart_type(image):
+    # This is a placeholder function. In a real implementation, 
+    # you'd use more sophisticated image processing or machine learning here.
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    lines = cv2.HoughLines(edges, 1, np.pi/180, 200)
+    
+    if lines is not None and len(lines) > 10:
+        return "line"
+    
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) > 10:
+        return "bar"
+    
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+    if circles is not None:
+        return "pie"
+    
+    return "scatter"
+
+def extract_text_and_data(image, chart_type):
     text = pytesseract.image_to_string(image)
     gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        data_points = np.array([point[0] for point in largest_contour])
+    if chart_type == "line":
+        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            data_points = np.array([point[0] for point in largest_contour])
+            data_points = data_points[data_points[:, 0].argsort()]
+    elif chart_type == "bar":
+        _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        data_points = np.array([(cnt[0][0][0], gray.shape[0] - cnt.max(axis=0)[0][1]) for cnt in contours])
         data_points = data_points[data_points[:, 0].argsort()]
-        
-        date_pattern = r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b'
-        dates = re.findall(date_pattern, text)
-        
-        return text, data_points, dates
+    elif chart_type == "pie":
+        circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+        if circles is not None:
+            circles = np.uint16(np.around(circles))
+            center = circles[0, 0]
+            data_points = []
+            for i in range(0, 360, 10):
+                x = int(center[0] + 0.9 * center[2] * np.cos(np.radians(i)))
+                y = int(center[1] + 0.9 * center[2] * np.sin(np.radians(i)))
+                if 0 <= x < gray.shape[1] and 0 <= y < gray.shape[0]:
+                    data_points.append((i, gray[y, x]))
+            data_points = np.array(data_points)
+    else:  # scatter
+        _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        data_points = np.array([cnt.mean(axis=0)[0] for cnt in contours if len(cnt) == 1])
     
-    return text, None, []
+    return text, data_points
 
-def map_data_to_dates(data_points, dates):
-    if len(dates) < 2:
-        return None
-    
-    start_date = datetime.strptime(dates[0], '%b %Y')
-    end_date = datetime.strptime(dates[-1], '%b %Y')
-    date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
-    
-    x_min, x_max = data_points[:, 0].min(), data_points[:, 0].max()
-    x_range = x_max - x_min
-    
-    mapped_data = []
-    for i, date in enumerate(date_range):
-        x_pos = x_min + (i / (len(date_range) - 1)) * x_range
-        closest_point = data_points[np.argmin(np.abs(data_points[:, 0] - x_pos))]
-        mapped_data.append((date, closest_point[1]))
-    
-    return pd.DataFrame(mapped_data, columns=['Date', 'Value'])
-
-def generate_insights(df):
+def generate_insights(data_points, chart_type):
     insights = []
     
-    period_start = df['Date'].iloc[0].strftime('%B %Y')
-    period_end = df['Date'].iloc[-1].strftime('%B %Y')
-    
-    # Overall trend
-    first_value = df['Value'].iloc[0]
-    last_value = df['Value'].iloc[-1]
-    percent_change = ((last_value - first_value) / first_value) * 100
-    trend = "increased" if percent_change > 0 else "decreased"
-    insights.append((f"From {period_start} to {period_end}, the value {trend} by {abs(percent_change):.2f}%.", [trend]))
-
-    # Highest and lowest values
-    max_row = df.loc[df['Value'].idxmax()]
-    min_row = df.loc[df['Value'].idxmin()]
-    insights.append((f"The highest value was {max_row['Value']:.2f} in {max_row['Date'].strftime('%B %Y')}, while the lowest was {min_row['Value']:.2f} in {min_row['Date'].strftime('%B %Y')}.", ["highest", "lowest"]))
-
-    # Comparison to average
-    avg_value = df['Value'].mean()
-    df['Pct_Diff_From_Avg'] = (df['Value'] - avg_value) / avg_value * 100
-    above_avg = df[df['Value'] > avg_value]
-    below_avg = df[df['Value'] < avg_value]
-    
-    insights.append((f"The average value from {period_start} to {period_end} was {avg_value:.2f}.", []))
-    
-    above_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {row['Pct_Diff_From_Avg']:.2f}% above average)" for _, row in above_avg.iterrows()]
-    below_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {abs(row['Pct_Diff_From_Avg']):.2f}% below average)" for _, row in below_avg.iterrows()]
-    
-    insights.append((f"{len(above_avg)} months were above average: {', '.join(above_avg_info)}.", ["above"]))
-    insights.append((f"{len(below_avg)} months were below average: {', '.join(below_avg_info)}.", ["below"]))
-
-    # Month-to-month changes
-    df['Change'] = df['Value'].pct_change() * 100
-    max_increase = df.iloc[df['Change'].idxmax()]
-    max_decrease = df.iloc[df['Change'].idxmin()]
-    insights.append((f"The largest month-to-month increase was {max_increase['Change']:.2f}% from {df.iloc[df['Change'].idxmax() - 1]['Date'].strftime('%B %Y')} to {max_increase['Date'].strftime('%B %Y')}.", ["increase"]))
-    insights.append((f"The largest month-to-month decrease was {abs(max_decrease['Change']):.2f}% from {df.iloc[df['Change'].idxmin() - 1]['Date'].strftime('%B %Y')} to {max_decrease['Date'].strftime('%B %Y')}.", ["decrease"]))
-
+    if chart_type == "line" or chart_type == "bar":
+        min_val = data_points[:, 1].min()
+        max_val = data_points[:, 1].max()
+        avg_val = data_points[:, 1].mean()
+        insights.append((f"The minimum value is {min_val:.2f}", ["minimum"]))
+        insights.append((f"The maximum value is {max_val:.2f}", ["maximum"]))
+        insights.append((f"The average value is {avg_val:.2f}", ["average"]))
+        
+        if chart_type == "line":
+            trend = "upward" if data_points[-1, 1] > data_points[0, 1] else "downward"
+            insights.append((f"The overall trend is {trend}", [trend]))
+        
+    elif chart_type == "pie":
+        total = data_points[:, 1].sum()
+        max_slice = data_points[data_points[:, 1].argmax()]
+        min_slice = data_points[data_points[:, 1].argmin()]
+        insights.append((f"The largest slice is at {max_slice[0]} degrees, representing {(max_slice[1]/total)*100:.2f}% of the total", ["largest"]))
+        insights.append((f"The smallest slice is at {min_slice[0]} degrees, representing {(min_slice[1]/total)*100:.2f}% of the total", ["smallest"]))
+        
+    else:  # scatter
+        x_min, x_max = data_points[:, 0].min(), data_points[:, 0].max()
+        y_min, y_max = data_points[:, 1].min(), data_points[:, 1].max()
+        insights.append((f"The x-axis ranges from {x_min:.2f} to {x_max:.2f}", ["x-axis"]))
+        insights.append((f"The y-axis ranges from {y_min:.2f} to {y_max:.2f}", ["y-axis"]))
+        
     return insights
 
 def color_text(text, words_to_color, color):
@@ -90,44 +97,41 @@ def color_text(text, words_to_color, color):
         text = text.replace(word, f'<span style="color:{color}">{word}</span>')
     return text
 
-st.title("Graph Interpreter with OCR")
+st.title("Multi-Chart Interpreter with OCR")
 
-# Color pickers in sidebar
 st.sidebar.header("Customize Colors")
 positive_color = st.sidebar.color_picker("Pick a color for positive trends", "#FF0000")
 negative_color = st.sidebar.color_picker("Pick a color for negative trends", "#00FF00")
 
-# Optional table display
 show_table = st.sidebar.checkbox("Show data table", False)
 
-uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("Upload a chart image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption='Uploaded Graph', use_column_width=True)
+    st.image(image, caption='Uploaded Chart', use_column_width=True)
     
     if image.mode != "RGB":
         image = image.convert("RGB")
     
-    text, data_points, dates = extract_text_and_data(image)
+    chart_type = detect_chart_type(image)
+    st.write(f"Detected chart type: {chart_type}")
     
-    if data_points is not None and dates:
-        df = map_data_to_dates(data_points, dates)
+    text, data_points = extract_text_and_data(image, chart_type)
+    
+    if data_points is not None:
+        insights = generate_insights(data_points, chart_type)
         
-        if df is not None:
-            insights = generate_insights(df)
-            
-            st.write("### Graph Interpretation Summary")
-            for insight, words_to_color in insights:
-                colored_text = color_text(insight, words_to_color, positive_color if any(word in ["increased", "highest", "above", "increase"] for word in words_to_color) else negative_color)
-                st.markdown(colored_text, unsafe_allow_html=True)
-            
-            if show_table:
-                st.write("### Extracted Data")
-                st.dataframe(df)
-        else:
-            st.write("Could not map data points to dates. Please check the image quality.")
+        st.write("### Chart Interpretation Summary")
+        for insight, words_to_color in insights:
+            colored_text = color_text(insight, words_to_color, positive_color if any(word in ["upward", "maximum", "largest"] for word in words_to_color) else negative_color)
+            st.markdown(colored_text, unsafe_allow_html=True)
+        
+        if show_table:
+            st.write("### Extracted Data")
+            df = pd.DataFrame(data_points, columns=['X', 'Y'])
+            st.dataframe(df)
     else:
-        st.write("Could not extract data points or dates from the image. Please try a different image.")
+        st.write("Could not extract data points from the image. Please check the image quality.")
 else:
     st.write("Please upload an image to begin analysis.")
