@@ -136,18 +136,29 @@ def display_insights_in_boxes(insights):
     
     st.markdown("""
     <style>
+    .insight-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+    }
     .insight-box {
         background: white;
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 15px;
-        margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
     }
     .insight-box:hover {
         transform: translateY(-5px);
         box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    }
+    .insight-content {
+        margin-bottom: 10px;
     }
     .copy-btn {
         background-color: #4CAF50;
@@ -158,7 +169,7 @@ def display_insights_in_boxes(insights):
         text-decoration: none;
         display: inline-block;
         font-size: 12px;
-        margin: 4px 2px;
+        margin-top: auto;
         cursor: pointer;
         border-radius: 4px;
     }
@@ -176,8 +187,12 @@ def display_insights_in_boxes(insights):
     </script>
     """, unsafe_allow_html=True)
 
+    st.markdown('<div class="insight-grid">', unsafe_allow_html=True)
+
     for i, insight in enumerate(insights):
         st.markdown(create_insight_box(insight, i), unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("Enhanced Graph Interpreter with OCR")
 
