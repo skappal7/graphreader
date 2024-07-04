@@ -18,7 +18,6 @@ def extract_text_and_data(image):
         data_points = np.array([point[0] for point in largest_contour])
         data_points = data_points[data_points[:, 0].argsort()]
         
-        # Extract dates from text
         date_pattern = r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b'
         dates = re.findall(date_pattern, text)
         
@@ -48,12 +47,15 @@ def map_data_to_dates(data_points, dates):
 def generate_insights(df):
     insights = []
     
+    period_start = df['Date'].iloc[0].strftime('%B %Y')
+    period_end = df['Date'].iloc[-1].strftime('%B %Y')
+    
     # Overall trend
     first_value = df['Value'].iloc[0]
     last_value = df['Value'].iloc[-1]
     percent_change = ((last_value - first_value) / first_value) * 100
     trend = "increased" if percent_change > 0 else "decreased"
-    insights.append(f"From {df['Date'].iloc[0].strftime('%B %Y')} to {df['Date'].iloc[-1].strftime('%B %Y')}, the value {trend} by {abs(percent_change):.2f}%.")
+    insights.append(f"From {period_start} to {period_end}, the value {trend} by {abs(percent_change):.2f}%.")
 
     # Highest and lowest values
     max_row = df.loc[df['Value'].idxmax()]
@@ -62,9 +64,17 @@ def generate_insights(df):
 
     # Comparison to average
     avg_value = df['Value'].mean()
+    df['Pct_Diff_From_Avg'] = (df['Value'] - avg_value) / avg_value * 100
     above_avg = df[df['Value'] > avg_value]
-    insights.append(f"The average value across the period was {avg_value:.2f}.")
-    insights.append(f"{len(above_avg)} months were above average: {', '.join(above_avg['Date'].dt.strftime('%B %Y'))}.")
+    below_avg = df[df['Value'] < avg_value]
+    
+    insights.append(f"The average value from {period_start} to {period_end} was {avg_value:.2f}.")
+    
+    above_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {row['Pct_Diff_From_Avg']:.2f}% above average)" for _, row in above_avg.iterrows()]
+    below_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {abs(row['Pct_Diff_From_Avg']):.2f}% below average)" for _, row in below_avg.iterrows()]
+    
+    insights.append(f"{len(above_avg)} months were above average: {', '.join(above_avg_info)}.")
+    insights.append(f"{len(below_avg)} months were below average: {', '.join(below_avg_info)}.")
 
     # Month-to-month changes
     df['Change'] = df['Value'].pct_change() * 100
@@ -75,7 +85,21 @@ def generate_insights(df):
 
     return insights
 
+def style_dataframe(df, high_color, low_color):
+    def color_cells(value):
+        if value > df['Value'].mean():
+            return f'color: {high_color}'
+        else:
+            return f'color: {low_color}'
+    
+    return df.style.applymap(color_cells, subset=['Value'])
+
 st.title("Graph Interpreter with OCR")
+
+# Color pickers in sidebar
+st.sidebar.header("Customize Colors")
+high_color = st.sidebar.color_picker("Pick a color for high values", "#FF0000")
+low_color = st.sidebar.color_picker("Pick a color for low values", "#00FF00")
 
 uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
 
@@ -93,7 +117,8 @@ if uploaded_file is not None:
         
         if df is not None:
             st.write("### Extracted Data")
-            st.dataframe(df)
+            styled_df = style_dataframe(df, high_color, low_color)
+            st.dataframe(styled_df)
             
             insights = generate_insights(df)
             
