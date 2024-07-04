@@ -3,6 +3,7 @@ from PIL import Image
 import cv2
 import numpy as np
 import pytesseract
+import pandas as pd
 from scipy.signal import find_peaks
 
 # Function to extract text using Tesseract OCR
@@ -71,7 +72,6 @@ if uploaded_file is not None:
         }
 
         # DataFrame for the table
-        import pandas as pd
         df = pd.DataFrame(high_low_data)
 
         # Customizable colors
@@ -89,5 +89,19 @@ if uploaded_file is not None:
         # Display the styled DataFrame
         st.write("### High and Low Values by Month")
         st.dataframe(styled_df)
+
+        # Display the summary in a markdown text box
+        summary = f"""
+### Graph Interpretation Summary
+
+**Trend**: The overall trend shows a {'rising' if np.mean(data_points[:, 1]) < np.mean(data_points[-window_size:, 1]) else 'falling'} pattern, indicating a {'rise' if np.mean(data_points[:, 1]) < np.mean(data_points[-window_size:, 1]) else 'fall'} in sales over the months.
+
+**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around **{', '.join(peak_months)}**.
+
+**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around **{', '.join(trough_months)}**.
+
+**Insights**: The moving average indicates a consistent trend, smoothing out short-term fluctuations.
+"""
+        st.markdown(summary)
     else:
         st.write("No contours found.")
