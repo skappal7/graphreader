@@ -82,8 +82,8 @@ if uploaded_file is not None:
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(x=data_points[:, 0], y=data_points[:, 1], mode='lines', name='Extracted Points'))
-        fig.add_trace(go.Scatter(x=significant_peaks[:, 0], y=significant_peaks[:, 1], mode='markers+text', text=[f'Peak {months[i%len(months)]}' for i in range(len(significant_peaks))], textposition='top center', name='Significant Peaks'))
-        fig.add_trace(go.Scatter(x=significant_troughs[:, 0], y=significant_troughs[:, 1], mode='markers+text', text=[f'Trough {months[i%len(months)]}' for i in range(len(significant_troughs))], textposition='bottom center', name='Significant Troughs'))
+        fig.add_trace(go.Scatter(x=significant_peaks[:, 0], y=significant_peaks[:, 1], mode='markers+text', text=[f'Peak {months[i%len(months)]}' for i in range(len(significant_peaks))], textposition='top center', name='Significant Peaks', marker=dict(color='red')))
+        fig.add_trace(go.Scatter(x=significant_troughs[:, 0], y=significant_troughs[:, 1], mode='markers+text', text=[f'Trough {months[i%len(months)]}' for i in range(len(significant_troughs))], textposition='bottom center', name='Significant Troughs', marker=dict(color='blue')))
         fig.add_trace(go.Scatter(x=data_points[:, 0], y=trend_line, mode='lines', name='Trend Line', line=dict(dash='dash')))
         fig.add_trace(go.Scatter(x=data_points[window_size-1:, 0], y=moving_average, mode='lines', name='Moving Average', line=dict(color='orange')))
 
