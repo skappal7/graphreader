@@ -2,7 +2,7 @@ streamlit
 Pillow
 opencv-python
 numpy
-matplotlib
+plotly
 scipy
 scikit-learn
 pytesseract
