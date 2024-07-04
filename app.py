@@ -49,8 +49,6 @@ if uploaded_file is not None:
         cv2.rectangle(image_with_box, (x, y), (x+w, y+h), (255, 0, 0), 2)
         st.image(image_with_box, caption='Largest Contour Highlighted.', use_column_width=True)
         
-        st.write(f"Bounding box of the largest contour: x={x}, y={y}, width={w}, height={h}")
-
         # Extract the points from the largest contour
         data_points = []
         for point in largest_contour:
@@ -62,8 +60,10 @@ if uploaded_file is not None:
         # Identify peaks and troughs
         peaks, _ = find_peaks(data_points[:, 1])
         troughs, _ = find_peaks(-data_points[:, 1])
-        peaks_x = data_points[peaks, 0]
-        troughs_x = data_points[troughs, 0]
+        
+        # Select a few significant peaks and troughs
+        significant_peaks = data_points[peaks][:5] if len(peaks) > 5 else data_points[peaks]
+        significant_troughs = data_points[troughs][:5] if len(troughs) > 5 else data_points[troughs]
 
         # Fit a trend line
         X = data_points[:, 0].reshape(-1, 1)
@@ -80,16 +80,16 @@ if uploaded_file is not None:
         # Plot the annotated graph
         fig, ax = plt.subplots()
         ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
-        ax.plot(data_points[peaks, 0], data_points[peaks, 1], "x", label='Peaks')
-        ax.plot(data_points[troughs, 0], data_points[troughs, 1], "o", label='Troughs')
+        ax.plot(significant_peaks[:, 0], significant_peaks[:, 1], "x", label='Significant Peaks')
+        ax.plot(significant_troughs[:, 0], significant_troughs[:, 1], "o", label='Significant Troughs')
         ax.plot(data_points[:, 0], trend_line, label='Trend Line', linestyle='--')
         ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
         ax.invert_yaxis()
         ax.legend()
-        for i in peaks:
-            ax.annotate(f'Peak\n({data_points[i, 0]}, {data_points[i, 1]})', (data_points[i, 0], data_points[i, 1]), textcoords="offset points", xytext=(0,10), ha='center')
-        for i in troughs:
-            ax.annotate(f'Trough\n({data_points[i, 0]}, {data_points[i, 1]})', (data_points[i, 0], data_points[i, 1]), textcoords="offset points", xytext=(0,-15), ha='center')
+        for i in significant_peaks:
+            ax.annotate(f'Peak\n({i[0]}, {i[1]})', (i[0], i[1]), textcoords="offset points", xytext=(0,10), ha='center')
+        for i in significant_troughs:
+            ax.annotate(f'Trough\n({i[0]}, {i[1]})', (i[0], i[1]), textcoords="offset points", xytext=(0,-15), ha='center')
         
         st.pyplot(fig)
 
@@ -97,11 +97,11 @@ if uploaded_file is not None:
         summary = f"""
         **Graph Interpretation Summary**
 
-        - **Bounding Box**: The largest contour is located at (x={x}, y={y}) with a width of {w} and a height of {h}.
-        - **Peaks**: Significant peaks are identified at x-coordinates: {peaks_x.tolist()}.
-        - **Troughs**: Significant troughs are identified at x-coordinates: {troughs_x.tolist()}.
+        - **Bounding Box**: The graph's main area of interest is highlighted.
+        - **Peaks**: Identified several significant peaks, highlighting the highest points.
+        - **Troughs**: Identified several significant troughs, marking the lowest points.
         - **Trend Line**: The overall trend is {trend_description}.
-        - **Moving Average**: A moving average with a window size of {window_size} smooths out short-term fluctuations.
+        - **Moving Average**: The moving average smooths out short-term fluctuations, providing a clearer view of the trend.
         """
         st.text_area("Graph Interpretation Summary", summary, height=250)
 
