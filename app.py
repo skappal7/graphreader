@@ -95,15 +95,17 @@ if uploaded_file is not None:
 
         # Display the summary in a text box
         summary = f"""
-**Trend**: The overall trend shows a {trend_description} pattern, indicating a {trend_description} in sales over the months.
+### Graph Interpretation Summary
 
-**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around {', '.join(months[:len(significant_peaks)])}.
+**Trend**: The overall trend shows a **{trend_description}** pattern, indicating a {trend_description} in sales over the months.
 
-**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around {', '.join(months[:len(significant_troughs)])}.
+**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around **{', '.join(months[:len(significant_peaks)])}**.
+
+**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around **{', '.join(months[:len(significant_troughs)])}**.
 
 **Insights**: The moving average indicates a consistent upward trend, smoothing out short-term fluctuations.
 """
-        st.text_area("Graph Interpretation Summary", summary, height=150)
+        st.markdown(summary)
 
     else:
         st.write("No contours found.")
