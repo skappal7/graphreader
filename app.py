@@ -180,18 +180,13 @@ def display_insights_in_boxes(insights):
     </script>
     """, unsafe_allow_html=True)
 
-    # Create a 4-column layout
-    cols = st.columns(4)
-
-    for i, insight in enumerate(insights):
-        with cols[i % 4]:
-            st.markdown(create_insight_box(insight, i), unsafe_allow_html=True)
-
-    # If the number of insights is not a multiple of 4, add empty boxes to complete the grid
-    remaining = 4 - (len(insights) % 4) if len(insights) % 4 != 0 else 0
-    for i in range(remaining):
-        with cols[(len(insights) + i) % 4]:
-            st.markdown('<div class="insight-box"></div>', unsafe_allow_html=True)
+    # Create rows of 4 columns each
+    for i in range(0, len(insights), 4):
+        cols = st.columns(4)
+        for j in range(4):
+            if i + j < len(insights):
+                with cols[j]:
+                    st.markdown(create_insight_box(insights[i+j], i+j), unsafe_allow_html=True)
 
 st.title("Enhanced Graph Interpreter with OCR")
 
