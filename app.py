@@ -6,105 +6,104 @@ import pytesseract
 import pandas as pd
 from scipy.signal import find_peaks
 
-# Function to extract text using Tesseract OCR
-def extract_text_from_image(image):
+def extract_text_and_data(image):
+    # Extract text using OCR
     text = pytesseract.image_to_string(image)
-    return text
+    
+    # Convert image to grayscale
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    
+    # Use Canny edge detection
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    
+    # Find contours
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if contours:
+        # Get the largest contour (assuming it's the graph line)
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        # Extract data points
+        data_points = np.array([point[0] for point in largest_contour])
+        
+        # Sort data points by x-coordinate
+        data_points = data_points[data_points[:, 0].argsort()]
+        
+        return text, data_points
+    
+    return text, None
 
-# Function to extract data points from the largest contour
-def extract_data_points(contour):
-    data_points = []
-    for point in contour:
-        data_points.append(point[0])
-    data_points = np.array(data_points)
-    return data_points
-
-# Step 2: Upload the graph
 st.title("Graph Interpreter with OCR")
-uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg", "png"])
+
+uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption='Uploaded Graph.', use_column_width=True)
+    st.image(image, caption='Uploaded Graph', use_column_width=True)
     
     # Ensure image is in RGB mode
     if image.mode != "RGB":
         image = image.convert("RGB")
     
-    # Convert the image to an array
-    image_array = np.array(image)
-
-    # Extract text using OCR
-    text_from_image = extract_text_from_image(image)
+    # Extract text and data points
+    text, data_points = extract_text_and_data(image)
     
-    # Extract month names and other relevant text
-    months = [month for month in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] if month in text_from_image]
-
-    # Convert image to grayscale
-    gray = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
-
-    # Use Canny edge detection
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-
-    # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    if len(contours) > 0:
-        largest_contour = max(contours, key=cv2.contourArea)
-        data_points = extract_data_points(largest_contour)
-        data_points = data_points[data_points[:, 0].argsort()]  # Sort by x-axis
-
+    if data_points is not None:
+        # Extract month names
+        months = [month for month in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] if month in text]
+        
         # Identify peaks and troughs
         peaks, _ = find_peaks(data_points[:, 1])
         troughs, _ = find_peaks(-data_points[:, 1])
-
-        # Extract peak and trough values with corresponding months
-        peak_values = data_points[peaks][:, 1]
-        trough_values = data_points[troughs][:, 1]
+        
+        # Prepare data for DataFrame
         peak_months = [months[i % len(months)] for i in range(len(peaks))]
         trough_months = [months[i % len(months)] for i in range(len(troughs))]
-
-        # Prepare data for the table
-        high_low_data = {
+        peak_values = data_points[peaks][:, 1]
+        trough_values = data_points[troughs][:, 1]
+        
+        df_data = {
             "Month": peak_months + trough_months,
             "Value": list(peak_values) + list(trough_values),
-            "Type": ["High"] * len(peak_values) + ["Low"] * len(trough_values)
+            "Type": ["High"] * len(peaks) + ["Low"] * len(troughs)
         }
-
-        # DataFrame for the table
-        df = pd.DataFrame(high_low_data)
-
-        # Customizable colors
-        st.sidebar.header("Customize Colors")
-        high_color = st.sidebar.color_picker("Pick a color for High values", "#00FF00")
-        low_color = st.sidebar.color_picker("Pick a color for Low values", "#FF0000")
-
-        # Apply colors to the DataFrame
-        def highlight_values(val, type_):
-            color = high_color if type_ == "High" else low_color
-            return f'background-color: {color}'
-
-        styled_df = df.style.apply(lambda x: [highlight_values(v, t) for v, t in zip(x, df['Type'])], axis=1)
         
-        # Display the styled DataFrame
-        st.write("### High and Low Values by Month")
+        df = pd.DataFrame(df_data)
+        
+        # Color customization
+        st.sidebar.header("Customize Colors")
+        high_color = st.sidebar.color_picker("High value color", "#00FF00")
+        low_color = st.sidebar.color_picker("Low value color", "#FF0000")
+        
+        # Apply conditional formatting
+        def color_cells(val):
+            color = high_color if val == "High" else low_color
+            return f'background-color: {color}'
+        
+        styled_df = df.style.applymap(color_cells, subset=['Type'])
+        
+        # Display table
+        st.write("### High and Low Values")
         st.dataframe(styled_df)
-
-        # Define window_size
+        
+        # Generate and display summary
         window_size = min(3, len(data_points))
-
-        # Display the summary in a markdown text box
+        trend = 'rising' if np.mean(data_points[:, 1]) < np.mean(data_points[-window_size:, 1]) else 'falling'
+        
         summary = f"""
-### Graph Interpretation Summary
-
-**Trend**: The overall trend shows a {'rising' if np.mean(data_points[:, 1]) < np.mean(data_points[-window_size:, 1]) else 'falling'} pattern, indicating a {'rise' if np.mean(data_points[:, 1]) < np.mean(data_points[-window_size:, 1]) else 'fall'} in sales over the months.
-
-**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around **{', '.join(peak_months)}**.
-
-**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around **{', '.join(trough_months)}**.
-
-**Insights**: The moving average indicates a consistent trend, smoothing out short-term fluctuations.
-"""
+        ### Graph Interpretation Summary
+        
+        **Trend**: The overall trend shows a {trend} pattern.
+        
+        **Peaks**: Highest values observed in {', '.join(peak_months)}.
+        
+        **Troughs**: Lowest values observed in {', '.join(trough_months)}.
+        
+        **Insight**: The data suggests {trend} values over time with fluctuations.
+        """
+        
         st.markdown(summary)
     else:
-        st.write("No contours found.")
+        st.write("Could not extract data points from the image. Please try a different image.")
+else:
+    st.write("Please upload an image to begin analysis.")
