@@ -55,12 +55,12 @@ def generate_insights(df):
     last_value = df['Value'].iloc[-1]
     percent_change = ((last_value - first_value) / first_value) * 100
     trend = "increased" if percent_change > 0 else "decreased"
-    insights.append(f"From {period_start} to {period_end}, the value {trend} by {abs(percent_change):.2f}%.")
+    insights.append((f"From {period_start} to {period_end}, the value {trend} by {abs(percent_change):.2f}%.", [trend]))
 
     # Highest and lowest values
     max_row = df.loc[df['Value'].idxmax()]
     min_row = df.loc[df['Value'].idxmin()]
-    insights.append(f"The highest value was {max_row['Value']:.2f} in {max_row['Date'].strftime('%B %Y')}, while the lowest was {min_row['Value']:.2f} in {min_row['Date'].strftime('%B %Y')}.")
+    insights.append((f"The highest value was {max_row['Value']:.2f} in {max_row['Date'].strftime('%B %Y')}, while the lowest was {min_row['Value']:.2f} in {min_row['Date'].strftime('%B %Y')}.", ["highest", "lowest"]))
 
     # Comparison to average
     avg_value = df['Value'].mean()
@@ -68,38 +68,37 @@ def generate_insights(df):
     above_avg = df[df['Value'] > avg_value]
     below_avg = df[df['Value'] < avg_value]
     
-    insights.append(f"The average value from {period_start} to {period_end} was {avg_value:.2f}.")
+    insights.append((f"The average value from {period_start} to {period_end} was {avg_value:.2f}.", []))
     
     above_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {row['Pct_Diff_From_Avg']:.2f}% above average)" for _, row in above_avg.iterrows()]
     below_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {abs(row['Pct_Diff_From_Avg']):.2f}% below average)" for _, row in below_avg.iterrows()]
     
-    insights.append(f"{len(above_avg)} months were above average: {', '.join(above_avg_info)}.")
-    insights.append(f"{len(below_avg)} months were below average: {', '.join(below_avg_info)}.")
+    insights.append((f"{len(above_avg)} months were above average: {', '.join(above_avg_info)}.", ["above"]))
+    insights.append((f"{len(below_avg)} months were below average: {', '.join(below_avg_info)}.", ["below"]))
 
     # Month-to-month changes
     df['Change'] = df['Value'].pct_change() * 100
     max_increase = df.iloc[df['Change'].idxmax()]
     max_decrease = df.iloc[df['Change'].idxmin()]
-    insights.append(f"The largest month-to-month increase was {max_increase['Change']:.2f}% from {df.iloc[df['Change'].idxmax() - 1]['Date'].strftime('%B %Y')} to {max_increase['Date'].strftime('%B %Y')}.")
-    insights.append(f"The largest month-to-month decrease was {abs(max_decrease['Change']):.2f}% from {df.iloc[df['Change'].idxmin() - 1]['Date'].strftime('%B %Y')} to {max_decrease['Date'].strftime('%B %Y')}.")
+    insights.append((f"The largest month-to-month increase was {max_increase['Change']:.2f}% from {df.iloc[df['Change'].idxmax() - 1]['Date'].strftime('%B %Y')} to {max_increase['Date'].strftime('%B %Y')}.", ["increase"]))
+    insights.append((f"The largest month-to-month decrease was {abs(max_decrease['Change']):.2f}% from {df.iloc[df['Change'].idxmin() - 1]['Date'].strftime('%B %Y')} to {max_decrease['Date'].strftime('%B %Y')}.", ["decrease"]))
 
     return insights
 
-def style_dataframe(df, high_color, low_color):
-    def color_cells(value):
-        if value > df['Value'].mean():
-            return f'color: {high_color}'
-        else:
-            return f'color: {low_color}'
-    
-    return df.style.applymap(color_cells, subset=['Value'])
+def color_text(text, words_to_color, color):
+    for word in words_to_color:
+        text = text.replace(word, f'<span style="color:{color}">{word}</span>')
+    return text
 
 st.title("Graph Interpreter with OCR")
 
 # Color pickers in sidebar
 st.sidebar.header("Customize Colors")
-high_color = st.sidebar.color_picker("Pick a color for high values", "#FF0000")
-low_color = st.sidebar.color_picker("Pick a color for low values", "#00FF00")
+positive_color = st.sidebar.color_picker("Pick a color for positive trends", "#FF0000")
+negative_color = st.sidebar.color_picker("Pick a color for negative trends", "#00FF00")
+
+# Optional table display
+show_table = st.sidebar.checkbox("Show data table", False)
 
 uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
 
@@ -116,15 +115,16 @@ if uploaded_file is not None:
         df = map_data_to_dates(data_points, dates)
         
         if df is not None:
-            st.write("### Extracted Data")
-            styled_df = style_dataframe(df, high_color, low_color)
-            st.dataframe(styled_df)
-            
             insights = generate_insights(df)
             
             st.write("### Graph Interpretation Summary")
-            for insight in insights:
-                st.write(f"- {insight}")
+            for insight, words_to_color in insights:
+                colored_text = color_text(insight, words_to_color, positive_color if any(word in ["increased", "highest", "above", "increase"] for word in words_to_color) else negative_color)
+                st.markdown(colored_text, unsafe_allow_html=True)
+            
+            if show_table:
+                st.write("### Extracted Data")
+                st.dataframe(df)
         else:
             st.write("Could not map data points to dates. Please check the image quality.")
     else:
