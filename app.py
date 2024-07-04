@@ -136,21 +136,14 @@ def display_insights_in_boxes(insights):
     
     st.markdown("""
     <style>
-    .insight-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 15px;
-    }
     .insight-box {
         background: white;
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 15px;
+        margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         transition: all 0.3s ease;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
         height: 100%;
     }
     .insight-box:hover {
@@ -169,9 +162,9 @@ def display_insights_in_boxes(insights):
         text-decoration: none;
         display: inline-block;
         font-size: 12px;
-        margin-top: auto;
         cursor: pointer;
         border-radius: 4px;
+        margin-top: 10px;
     }
     </style>
     
@@ -187,12 +180,18 @@ def display_insights_in_boxes(insights):
     </script>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="insight-grid">', unsafe_allow_html=True)
+    # Create a 4-column layout
+    cols = st.columns(4)
 
     for i, insight in enumerate(insights):
-        st.markdown(create_insight_box(insight, i), unsafe_allow_html=True)
+        with cols[i % 4]:
+            st.markdown(create_insight_box(insight, i), unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    # If the number of insights is not a multiple of 4, add empty boxes to complete the grid
+    remaining = 4 - (len(insights) % 4) if len(insights) % 4 != 0 else 0
+    for i in range(remaining):
+        with cols[(len(insights) + i) % 4]:
+            st.markdown('<div class="insight-box"></div>', unsafe_allow_html=True)
 
 st.title("Enhanced Graph Interpreter with OCR")
 
