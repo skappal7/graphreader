@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
+from sklearn.linear_model import LinearRegression
 
 # Step 2: Upload the graph
 st.title("Graph Interpreter")
@@ -66,13 +67,59 @@ if uploaded_file is not None:
 
         # Identify peaks
         peaks, _ = find_peaks(data_points[:, 1])
+        troughs, _ = find_peaks(-data_points[:, 1])
         st.write(f"Identified peaks at x-coordinates: {data_points[peaks, 0]}")
+        st.write(f"Identified troughs at x-coordinates: {data_points[troughs, 0]}")
 
-        # Plot with peaks
+        # Plot with peaks and troughs
         fig, ax = plt.subplots()
         ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
         ax.plot(data_points[peaks, 0], data_points[peaks, 1], "x", label='Peaks')
+        ax.plot(data_points[troughs, 0], data_points[troughs, 1], "o", label='Troughs')
         ax.invert_yaxis()
+        ax.legend()
+        st.pyplot(fig)
+
+        # Fit a trend line
+        X = data_points[:, 0].reshape(-1, 1)
+        y = data_points[:, 1]
+        model = LinearRegression()
+        model.fit(X, y)
+        trend_line = model.predict(X)
+
+        # Plot the trend line
+        fig, ax = plt.subplots()
+        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
+        ax.plot(data_points[:, 0], trend_line, label='Trend Line', linestyle='--')
+        ax.invert_yaxis()
+        ax.legend()
+        st.pyplot(fig)
+
+        # Calculate and plot moving average
+        window_size = 5
+        moving_average = np.convolve(data_points[:, 1], np.ones(window_size)/window_size, mode='valid')
+
+        fig, ax = plt.subplots()
+        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
+        ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
+        ax.invert_yaxis()
+        ax.legend()
+        st.pyplot(fig)
+
+        # Annotate significant points
+        fig, ax = plt.subplots()
+        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
+        ax.plot(data_points[peaks, 0], data_points[peaks, 1], "x", label='Peaks')
+        ax.plot(data_points[troughs, 0], data_points[troughs, 1], "o", label='Troughs')
+        ax.plot(data_points[:, 0], trend_line, label='Trend Line', linestyle='--')
+        ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
+        ax.invert_yaxis()
+
+        for i in peaks:
+            ax.annotate(f'Peak\n({data_points[i, 0]}, {data_points[i, 1]})', (data_points[i, 0], data_points[i, 1]), textcoords="offset points", xytext=(0,10), ha='center')
+        for i in troughs:
+            ax.annotate(f'Trough\n({data_points[i, 0]}, {data_points[i, 1]})', (data_points[i, 0], data_points[i, 1]), textcoords="offset points", xytext=(0,-15), ha='center')
+        
         ax.legend()
         st.pyplot(fig)
 
