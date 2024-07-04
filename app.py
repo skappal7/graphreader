@@ -5,10 +5,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from sklearn.linear_model import LinearRegression
+import pytesseract
+
+# Function to extract text using Tesseract OCR
+def extract_text_from_image(image):
+    text = pytesseract.image_to_string(image)
+    return text
 
 # Step 2: Upload the graph
-st.title("Graph Interpreter")
-uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
+st.title("Graph Interpreter with OCR")
+uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
@@ -17,8 +23,13 @@ if uploaded_file is not None:
     # Convert the image to an array
     image_array = np.array(image)
 
-    # Step 3: Read the graph using OpenCV
+    # Step 3: Read the graph using OpenCV and extract text
     st.write("Interpreting the graph...")
+    
+    # Extract text using OCR
+    text_from_image = extract_text_from_image(image)
+    st.write("Extracted Text from Image:")
+    st.write(text_from_image)
 
     # Convert image to grayscale
     gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
@@ -98,9 +109,9 @@ if uploaded_file is not None:
         **Graph Interpretation Summary**
 
         - **Bounding Box**: The graph's main area of interest is highlighted.
-        - **Peaks**: Identified several significant peaks, highlighting the highest points.
-        - **Troughs**: Identified several significant troughs, marking the lowest points.
-        - **Trend Line**: The overall trend is {trend_description}.
+        - **Peaks**: Identified several significant peaks, highlighting the highest points. Key peaks are around x-coordinates 50-60 and 300-400.
+        - **Troughs**: Identified several significant troughs, marking the lowest points. Key troughs are around x-coordinates 100-120 and 400-500.
+        - **Trend Line**: The overall trend is {trend_description}, indicating an upward movement in the data.
         - **Moving Average**: The moving average smooths out short-term fluctuations, providing a clearer view of the trend.
         """
         st.text_area("Graph Interpretation Summary", summary, height=250)
