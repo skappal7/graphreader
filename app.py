@@ -90,6 +90,9 @@ if uploaded_file is not None:
         st.write("### High and Low Values by Month")
         st.dataframe(styled_df)
 
+        # Define window_size
+        window_size = min(3, len(data_points))
+
         # Display the summary in a markdown text box
         summary = f"""
 ### Graph Interpretation Summary
