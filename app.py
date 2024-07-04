@@ -20,6 +20,10 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption='Uploaded Graph.', use_column_width=True)
     
+    # Ensure image is in RGB mode
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    
     # Convert the image to an array
     image_array = np.array(image)
 
@@ -33,7 +37,7 @@ if uploaded_file is not None:
     months = [month for month in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] if month in text_from_image]
     
     # Convert image to grayscale
-    gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
 
     # Use Canny edge detection
     edges = cv2.Canny(gray, 50, 150, apertureSize=3)
