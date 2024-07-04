@@ -30,7 +30,10 @@ if uploaded_file is not None:
     text_from_image = extract_text_from_image(image)
     st.write("Extracted Text from Image:")
     st.write(text_from_image)
-
+    
+    # Extract month names and other relevant text
+    months = [month for month in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] if month in text_from_image]
+    
     # Convert image to grayscale
     gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
 
@@ -97,10 +100,13 @@ if uploaded_file is not None:
         ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
         ax.invert_yaxis()
         ax.legend()
-        for i in significant_peaks:
-            ax.annotate(f'Peak\n({i[0]}, {i[1]})', (i[0], i[1]), textcoords="offset points", xytext=(0,10), ha='center')
-        for i in significant_troughs:
-            ax.annotate(f'Trough\n({i[0]}, {i[1]})', (i[0], i[1]), textcoords="offset points", xytext=(0,-15), ha='center')
+
+        # Annotate peaks and troughs with corresponding month names
+        if len(months) > 0:
+            for i, point in enumerate(significant_peaks):
+                ax.annotate(f'Peak\n{months[i%len(months)]}\n({point[0]}, {point[1]})', (point[0], point[1]), textcoords="offset points", xytext=(0,10), ha='center')
+            for i, point in enumerate(significant_troughs):
+                ax.annotate(f'Trough\n{months[i%len(months)]}\n({point[0]}, {point[1]})', (point[0], point[1]), textcoords="offset points", xytext=(0,-15), ha='center')
         
         st.pyplot(fig)
 
@@ -108,11 +114,10 @@ if uploaded_file is not None:
         summary = f"""
         **Graph Interpretation Summary**
 
-        - **Bounding Box**: The graph's main area of interest is highlighted.
-        - **Peaks**: Identified several significant peaks, highlighting the highest points. Key peaks are around x-coordinates 50-60 and 300-400.
-        - **Troughs**: Identified several significant troughs, marking the lowest points. Key troughs are around x-coordinates 100-120 and 400-500.
-        - **Trend Line**: The overall trend is {trend_description}, indicating an upward movement in the data.
-        - **Moving Average**: The moving average smooths out short-term fluctuations, providing a clearer view of the trend.
+        - **Trend**: The overall trend shows a {trend_description} pattern, indicating a {trend_description} in sales over the months.
+        - **Peaks**: Significant peaks, indicating the highest sales, are observed in the months around {', '.join(months[:len(significant_peaks)])}.
+        - **Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around {', '.join(months[:len(significant_troughs)])}.
+        - **Insights**: The moving average indicates a consistent upward trend, smoothing out short-term fluctuations.
         """
         st.text_area("Graph Interpretation Summary", summary, height=250)
 
