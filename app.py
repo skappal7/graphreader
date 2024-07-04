@@ -8,31 +8,68 @@ from datetime import datetime
 import re
 from scipy import stats
 
-def extract_text_and_data(image):
+def preprocess_image(image):
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    img_array = np.array(image)
+    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    return gray
+
+def extract_text_and_structure(image):
     text = pytesseract.image_to_string(image)
-    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    
+    # Extract and classify text elements
+    title_pattern = r'^.*$'
+    date_pattern = r'\b(?:\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:\s+\d{4})?)\b'
+    value_pattern = r'\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b'
+    
+    title = re.search(title_pattern, text, re.MULTILINE).group(0)
+    dates = re.findall(date_pattern, text)
+    values = [parse_value(v) for v in re.findall(value_pattern, text)]
+    
+    chart_structure = {
+        'title': title,
+        'x_axis': min(dates),
+        'y_axis': min(values)
+    }
+    
+    return {'title': title, 'dates': dates, 'values': values}, chart_structure
+
+def parse_value(value_str):
+    return float(value_str.replace(',', ''))
+
+def classify_time_scale(dates):
+    if all(len(date) == 4 for date in dates):
+        return 'yearly'
+    elif all('Q' in date for date in dates):
+        return 'quarterly'
+    else:
+        return 'monthly'
+
+def extract_data_points(image, chart_structure):
+    edges = cv2.Canny(image, 50, 150, apertureSize=3)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if contours:
         largest_contour = max(contours, key=cv2.contourArea)
         data_points = np.array([point[0] for point in largest_contour])
         data_points = data_points[data_points[:, 0].argsort()]
-        
-        date_pattern = r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b'
-        dates = re.findall(date_pattern, text)
-        
-        return text, data_points, dates
-    
-    return text, None, []
+        return data_points
+    return None
 
-def map_data_to_dates(data_points, dates):
+def map_data_to_time(data_points, time_scale, dates):
     if len(dates) < 2:
         return None
     
-    start_date = datetime.strptime(dates[0], '%b %Y')
-    end_date = datetime.strptime(dates[-1], '%b %Y')
-    date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
+    start_date = datetime.strptime(dates[0], '%Y' if time_scale == 'yearly' else '%b %Y')
+    end_date = datetime.strptime(dates[-1], '%Y' if time_scale == 'yearly' else '%b %Y')
+    
+    if time_scale == 'yearly':
+        date_range = pd.date_range(start=start_date, end=end_date, freq='YS')
+    elif time_scale == 'quarterly':
+        date_range = pd.date_range(start=start_date, end=end_date, freq='QS')
+    else:
+        date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
     
     x_min, x_max = data_points[:, 0].min(), data_points[:, 0].max()
     x_range = x_max - x_min
@@ -45,42 +82,21 @@ def map_data_to_dates(data_points, dates):
     
     return pd.DataFrame(mapped_data, columns=['Date', 'Value'])
 
-def calculate_trend(values):
-    x = np.arange(len(values))
-    slope, _, _, _, _ = stats.linregress(x, values)
-    return "increasing" if slope > 0 else "decreasing"
-
-def detect_seasonality(df):
-    if len(df) >= 24:  # At least 2 years of data
-        yearly_diff = df['Value'] - df['Value'].shift(12)
-        return yearly_diff.autocorr() > 0.5
-    return False
-
-def identify_outliers(df):
-    z_scores = np.abs(stats.zscore(df['Value']))
-    return df[z_scores > 3]
-
-def generate_insights(df):
+def generate_insights(df, time_scale):
     insights = []
     
-    period_start = df['Date'].iloc[0].strftime('%B %Y')
-    period_end = df['Date'].iloc[-1].strftime('%B %Y')
+    period_start = df['Date'].iloc[0].strftime('%Y' if time_scale == 'yearly' else '%B %Y')
+    period_end = df['Date'].iloc[-1].strftime('%Y' if time_scale == 'yearly' else '%B %Y')
     
     # Overall trend
-    overall_trend = calculate_trend(df['Value'])
+    overall_trend = "increased" if df['Value'].iloc[-1] > df['Value'].iloc[0] else "decreased"
     percent_change = ((df['Value'].iloc[-1] - df['Value'].iloc[0]) / df['Value'].iloc[0]) * 100
-    insights.append((f"From {period_start} to {period_end}, the overall trend was {overall_trend} with a {abs(percent_change):.2f}% change.", [overall_trend]))
-
-    # Quarterly trends
-    df['Quarter'] = df['Date'].dt.to_period('Q')
-    quarterly_trends = df.groupby('Quarter')['Value'].apply(lambda x: calculate_trend(x))
-    insights.append((f"Quarterly trends: " + ', '.join([f"{q}: {t}" for q, t in quarterly_trends.items()]), []))
+    insights.append((f"From {period_start} to {period_end}, the overall trend {overall_trend} by {abs(percent_change):.2f}%.", [overall_trend]))
 
     # Highest and lowest values
     max_row = df.loc[df['Value'].idxmax()]
     min_row = df.loc[df['Value'].idxmin()]
-    insights.append((f"The highest value was {max_row['Value']:.2f} in {max_row['Date'].strftime('%B %Y')}, {(max_row['Value']/df['Value'].mean() - 1)*100:.2f}% above the mean.", ["highest"]))
-    insights.append((f"The lowest value was {min_row['Value']:.2f} in {min_row['Date'].strftime('%B %Y')}, {(1 - min_row['Value']/df['Value'].mean())*100:.2f}% below the mean.", ["lowest"]))
+    insights.append((f"The highest value was {max_row['Value']:.2f} in {max_row['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')}, while the lowest was {min_row['Value']:.2f} in {min_row['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')}.", ["highest", "lowest"]))
 
     # Comparison to average
     avg_value = df['Value'].mean()
@@ -90,40 +106,18 @@ def generate_insights(df):
     
     insights.append((f"The average value from {period_start} to {period_end} was {avg_value:.2f}.", []))
     
-    above_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {row['Pct_Diff_From_Avg']:.2f}% above average)" for _, row in above_avg.iterrows()]
-    below_avg_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f}, {abs(row['Pct_Diff_From_Avg']):.2f}% below average)" for _, row in below_avg.iterrows()]
+    above_avg_info = [f"{row['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')} ({row['Value']:.2f}, {row['Pct_Diff_From_Avg']:.2f}% above average)" for _, row in above_avg.iterrows()]
+    below_avg_info = [f"{row['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')} ({row['Value']:.2f}, {abs(row['Pct_Diff_From_Avg']):.2f}% below average)" for _, row in below_avg.iterrows()]
     
-    insights.append((f"{len(above_avg)} months were above average: {', '.join(above_avg_info)}.", ["above"]))
-    insights.append((f"{len(below_avg)} months were below average: {', '.join(below_avg_info)}.", ["below"]))
+    insights.append((f"{len(above_avg)} periods were above average: {', '.join(above_avg_info)}.", ["above"]))
+    insights.append((f"{len(below_avg)} periods were below average: {', '.join(below_avg_info)}.", ["below"]))
 
-    # Month-to-month changes
+    # Period-to-period changes
     df['Change'] = df['Value'].pct_change() * 100
     max_increase = df.iloc[df['Change'].idxmax()]
     max_decrease = df.iloc[df['Change'].idxmin()]
-    insights.append((f"The largest month-to-month increase was {max_increase['Change']:.2f}% from {df.iloc[df['Change'].idxmax() - 1]['Date'].strftime('%B %Y')} to {max_increase['Date'].strftime('%B %Y')}.", ["increase"]))
-    insights.append((f"The largest month-to-month decrease was {abs(max_decrease['Change']):.2f}% from {df.iloc[df['Change'].idxmin() - 1]['Date'].strftime('%B %Y')} to {max_decrease['Date'].strftime('%B %Y')}.", ["decrease"]))
-
-    # Seasonality
-    if detect_seasonality(df):
-        insights.append(("Seasonal patterns detected in the data.", ["seasonal"]))
-
-    # Moving averages
-    df['MA3'] = df['Value'].rolling(window=3).mean()
-    df['MA6'] = df['Value'].rolling(window=6).mean()
-    last_ma3 = df['MA3'].iloc[-1]
-    last_ma6 = df['MA6'].iloc[-1]
-    insights.append((f"The 3-month moving average ended at {last_ma3:.2f}, while the 6-month moving average ended at {last_ma6:.2f}.", []))
-
-    # Outliers
-    outliers = identify_outliers(df)
-    if not outliers.empty:
-        outlier_info = [f"{row['Date'].strftime('%B %Y')} ({row['Value']:.2f})" for _, row in outliers.iterrows()]
-        insights.append((f"Outliers detected in {len(outliers)} months: {', '.join(outlier_info)}", ["outliers"]))
-
-    # Correlation with time
-    df['Time'] = range(len(df))  # Create a numeric representation of time
-    time_correlation = df['Value'].corr(df['Time'])
-    insights.append((f"The correlation between values and time is {time_correlation:.2f}, indicating a {abs(time_correlation):.2f} {'strong' if abs(time_correlation) > 0.7 else 'moderate' if abs(time_correlation) > 0.5 else 'weak'} {overall_trend} trend.", ["correlation"]))
+    insights.append((f"The largest {time_scale} increase was {max_increase['Change']:.2f}% from {df.iloc[df['Change'].idxmax() - 1]['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')} to {max_increase['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')}.", ["increase"]))
+    insights.append((f"The largest {time_scale} decrease was {abs(max_decrease['Change']):.2f}% from {df.iloc[df['Change'].idxmin() - 1]['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')} to {max_decrease['Date'].strftime('%Y' if time_scale == 'yearly' else '%B %Y')}.", ["decrease"]))
 
     return insights
 
@@ -134,12 +128,10 @@ def color_text(text, words_to_color, color):
 
 st.title("Enhanced Graph Interpreter with OCR")
 
-# Color pickers in sidebar
 st.sidebar.header("Customize Colors")
 positive_color = st.sidebar.color_picker("Pick a color for positive trends", "#FF0000")
 negative_color = st.sidebar.color_picker("Pick a color for negative trends", "#00FF00")
 
-# Optional table display
 show_table = st.sidebar.checkbox("Show data table", False)
 
 uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
@@ -148,28 +140,29 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption='Uploaded Graph', use_column_width=True)
     
-    if image.mode != "RGB":
-        image = image.convert("RGB")
+    processed_image = preprocess_image(image)
+    text_elements, chart_structure = extract_text_and_structure(processed_image)
     
-    text, data_points, dates = extract_text_and_data(image)
+    time_scale = classify_time_scale(text_elements['dates'])
+    data_points = extract_data_points(processed_image, chart_structure)
     
-    if data_points is not None and dates:
-        df = map_data_to_dates(data_points, dates)
+    if data_points is not None:
+        df = map_data_to_time(data_points, time_scale, text_elements['dates'])
         
         if df is not None:
-            insights = generate_insights(df)
+            insights = generate_insights(df, time_scale)
             
             st.write("### Graph Interpretation Summary")
             for insight, words_to_color in insights:
-                colored_text = color_text(insight, words_to_color, positive_color if any(word in ["increasing", "highest", "above", "increase"] for word in words_to_color) else negative_color)
+                colored_text = color_text(insight, words_to_color, positive_color if any(word in ["increased", "highest", "above", "increase"] for word in words_to_color) else negative_color)
                 st.markdown(colored_text, unsafe_allow_html=True)
             
             if show_table:
                 st.write("### Extracted Data")
                 st.dataframe(df)
         else:
-            st.write("Could not map data points to dates. Please check the image quality.")
+            st.write("Could not map data points to time. Please check the image quality.")
     else:
-        st.write("Could not extract data points or dates from the image. Please try a different image.")
+        st.write("Could not extract data points from the image. Please try a different image.")
 else:
     st.write("Please upload an image to begin analysis.")
