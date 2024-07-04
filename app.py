@@ -136,15 +136,19 @@ def display_insights_in_boxes(insights):
     
     st.markdown("""
     <style>
+    .masonry-container {
+        column-count: 3;
+        column-gap: 1em;
+    }
     .insight-box {
         background: white;
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 15px;
-        margin-bottom: 15px;
+        margin-bottom: 1em;
+        break-inside: avoid;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         transition: all 0.3s ease;
-        height: 100%;
     }
     .insight-box:hover {
         transform: translateY(-5px);
@@ -166,6 +170,16 @@ def display_insights_in_boxes(insights):
         border-radius: 4px;
         margin-top: 10px;
     }
+    @media (max-width: 1200px) {
+        .masonry-container {
+            column-count: 2;
+        }
+    }
+    @media (max-width: 800px) {
+        .masonry-container {
+            column-count: 1;
+        }
+    }
     </style>
     
     <script>
@@ -180,6 +194,14 @@ def display_insights_in_boxes(insights):
     </script>
     """, unsafe_allow_html=True)
 
+    # Create a masonry layout container
+    st.markdown('<div class="masonry-container">', unsafe_allow_html=True)
+
+    for i, insight in enumerate(insights):
+        st.markdown(create_insight_box(insight, i), unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # Create rows of 4 columns each
     for i in range(0, len(insights), 4):
         cols = st.columns(4)
@@ -188,7 +210,7 @@ def display_insights_in_boxes(insights):
                 with cols[j]:
                     st.markdown(create_insight_box(insights[i+j], i+j), unsafe_allow_html=True)
 
-st.title("Enhanced Graph Interpreter with OCR")
+st.title("Trend Chart Reader")
 
 st.sidebar.header("Customize Colors")
 positive_color = st.sidebar.color_picker("Pick a color for positive trends", "#FF0000")
