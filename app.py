@@ -202,13 +202,6 @@ def display_insights_in_boxes(insights):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Create rows of 4 columns each
-    for i in range(0, len(insights), 4):
-        cols = st.columns(4)
-        for j in range(4):
-            if i + j < len(insights):
-                with cols[j]:
-                    st.markdown(create_insight_box(insights[i+j], i+j), unsafe_allow_html=True)
 
 st.title("Trend Chart Reader")
 
