@@ -59,26 +59,11 @@ if uploaded_file is not None:
         data_points = np.array(data_points)
         data_points = data_points[data_points[:, 0].argsort()]  # Sort by x-axis
 
-        # Plot the extracted points
-        fig, ax = plt.subplots()
-        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
-        ax.invert_yaxis()
-        st.pyplot(fig)
-
-        # Identify peaks
+        # Identify peaks and troughs
         peaks, _ = find_peaks(data_points[:, 1])
         troughs, _ = find_peaks(-data_points[:, 1])
-        st.write(f"Identified peaks at x-coordinates: {data_points[peaks, 0]}")
-        st.write(f"Identified troughs at x-coordinates: {data_points[troughs, 0]}")
-
-        # Plot with peaks and troughs
-        fig, ax = plt.subplots()
-        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
-        ax.plot(data_points[peaks, 0], data_points[peaks, 1], "x", label='Peaks')
-        ax.plot(data_points[troughs, 0], data_points[troughs, 1], "o", label='Troughs')
-        ax.invert_yaxis()
-        ax.legend()
-        st.pyplot(fig)
+        peaks_x = data_points[peaks, 0]
+        troughs_x = data_points[troughs, 0]
 
         # Fit a trend line
         X = data_points[:, 0].reshape(-1, 1)
@@ -86,27 +71,13 @@ if uploaded_file is not None:
         model = LinearRegression()
         model.fit(X, y)
         trend_line = model.predict(X)
+        trend_description = "rising" if model.coef_[0] > 0 else "falling"
 
-        # Plot the trend line
-        fig, ax = plt.subplots()
-        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
-        ax.plot(data_points[:, 0], trend_line, label='Trend Line', linestyle='--')
-        ax.invert_yaxis()
-        ax.legend()
-        st.pyplot(fig)
-
-        # Calculate and plot moving average
+        # Calculate moving average
         window_size = 5
-        moving_average = np.convolve(data_points[:, 1], np.ones(window_size)/window_size, mode='valid')
+        moving_average = np.convolve(y, np.ones(window_size)/window_size, mode='valid')
 
-        fig, ax = plt.subplots()
-        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
-        ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
-        ax.invert_yaxis()
-        ax.legend()
-        st.pyplot(fig)
-
-        # Annotate significant points
+        # Plot the annotated graph
         fig, ax = plt.subplots()
         ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
         ax.plot(data_points[peaks, 0], data_points[peaks, 1], "x", label='Peaks')
@@ -114,14 +85,25 @@ if uploaded_file is not None:
         ax.plot(data_points[:, 0], trend_line, label='Trend Line', linestyle='--')
         ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
         ax.invert_yaxis()
-
+        ax.legend()
         for i in peaks:
             ax.annotate(f'Peak\n({data_points[i, 0]}, {data_points[i, 1]})', (data_points[i, 0], data_points[i, 1]), textcoords="offset points", xytext=(0,10), ha='center')
         for i in troughs:
             ax.annotate(f'Trough\n({data_points[i, 0]}, {data_points[i, 1]})', (data_points[i, 0], data_points[i, 1]), textcoords="offset points", xytext=(0,-15), ha='center')
         
-        ax.legend()
         st.pyplot(fig)
+
+        # Display the summary in a text box
+        summary = f"""
+        **Graph Interpretation Summary**
+
+        - **Bounding Box**: The largest contour is located at (x={x}, y={y}) with a width of {w} and a height of {h}.
+        - **Peaks**: Significant peaks are identified at x-coordinates: {peaks_x.tolist()}.
+        - **Troughs**: Significant troughs are identified at x-coordinates: {troughs_x.tolist()}.
+        - **Trend Line**: The overall trend is {trend_description}.
+        - **Moving Average**: A moving average with a window size of {window_size} smooths out short-term fluctuations.
+        """
+        st.text_area("Graph Interpretation Summary", summary, height=250)
 
     else:
         st.write("No contours found.")
