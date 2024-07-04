@@ -28,8 +28,6 @@ if uploaded_file is not None:
     
     # Extract text using OCR
     text_from_image = extract_text_from_image(image)
-    st.write("Extracted Text from Image:")
-    st.write(text_from_image)
     
     # Extract month names and other relevant text
     months = [month for month in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] if month in text_from_image]
@@ -43,25 +41,10 @@ if uploaded_file is not None:
     # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Draw contours on the original image
-    image_with_contours = image_array.copy()
-    cv2.drawContours(image_with_contours, contours, -1, (0, 255, 0), 3)
-    
-    # Display the contours
-    st.image(image_with_contours, caption='Contours Highlighted.', use_column_width=True)
-
-    # Step 4: Interpret the graph
-    st.write("Graph interpretation highlights:")
-
     # Extract data points (for simplicity, we'll assume the graph is a line chart)
     if len(contours) > 0:
         largest_contour = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(largest_contour)
-        
-        # Highlight the bounding box
-        image_with_box = image_array.copy()
-        cv2.rectangle(image_with_box, (x, y), (x+w, y+h), (255, 0, 0), 2)
-        st.image(image_with_box, caption='Largest Contour Highlighted.', use_column_width=True)
         
         # Extract the points from the largest contour
         data_points = []
@@ -112,14 +95,15 @@ if uploaded_file is not None:
 
         # Display the summary in a text box
         summary = f"""
-        **Graph Interpretation Summary**
+**Trend**: The overall trend shows a {trend_description} pattern, indicating a {trend_description} in sales over the months.
 
-        - **Trend**: The overall trend shows a {trend_description} pattern, indicating a {trend_description} in sales over the months.
-        - **Peaks**: Significant peaks, indicating the highest sales, are observed in the months around {', '.join(months[:len(significant_peaks)])}.
-        - **Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around {', '.join(months[:len(significant_troughs)])}.
-        - **Insights**: The moving average indicates a consistent upward trend, smoothing out short-term fluctuations.
-        """
-        st.text_area("Graph Interpretation Summary", summary, height=250)
+**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around {', '.join(months[:len(significant_peaks)])}.
+
+**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around {', '.join(months[:len(significant_troughs)])}.
+
+**Insights**: The moving average indicates a consistent upward trend, smoothing out short-term fluctuations.
+"""
+        st.text_area("Graph Interpretation Summary", summary, height=150)
 
     else:
         st.write("No contours found.")
