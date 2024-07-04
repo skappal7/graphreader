@@ -92,15 +92,19 @@ if uploaded_file is not None:
 
         st.plotly_chart(fig)
 
+        # Generate peak and trough months
+        peak_months = [months[i%len(months)] for i in range(len(significant_peaks))]
+        trough_months = [months[i%len(months)] for i in range(len(significant_troughs))]
+
         # Display the summary in a markdown text box
         summary = f"""
 ### Graph Interpretation Summary
 
 **Trend**: The overall trend shows a **{trend_description}** pattern, indicating a {trend_description} in sales over the months.
 
-**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around **{', '.join(months[:len(significant_peaks)])}**.
+**Peaks**: Significant peaks, indicating the highest sales, are observed in the months around **{', '.join(peak_months)}**.
 
-**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around **{', '.join(months[:len(significant_troughs)])}**.
+**Troughs**: Significant troughs, indicating the lowest sales, are observed in the months around **{', '.join(trough_months)}**.
 
 **Insights**: The moving average indicates a consistent upward trend, smoothing out short-term fluctuations.
 """
