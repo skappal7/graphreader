@@ -2,10 +2,10 @@ import streamlit as st
 from PIL import Image
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+import pytesseract
+import plotly.graph_objs as go
 from scipy.signal import find_peaks
 from sklearn.linear_model import LinearRegression
-import pytesseract
 
 # Function to extract text using Tesseract OCR
 def extract_text_from_image(image):
@@ -78,26 +78,21 @@ if uploaded_file is not None:
         window_size = 5
         moving_average = np.convolve(y, np.ones(window_size)/window_size, mode='valid')
 
-        # Plot the annotated graph
-        fig, ax = plt.subplots()
-        ax.plot(data_points[:, 0], data_points[:, 1], label='Extracted Points')
-        ax.plot(significant_peaks[:, 0], significant_peaks[:, 1], "x", label='Significant Peaks')
-        ax.plot(significant_troughs[:, 0], significant_troughs[:, 1], "o", label='Significant Troughs')
-        ax.plot(data_points[:, 0], trend_line, label='Trend Line', linestyle='--')
-        ax.plot(data_points[window_size-1:, 0], moving_average, label='Moving Average', color='orange')
-        ax.invert_yaxis()
-        ax.legend()
+        # Plot the annotated graph using Plotly
+        fig = go.Figure()
 
-        # Annotate peaks and troughs with corresponding month names
-        if len(months) > 0:
-            for i, point in enumerate(significant_peaks):
-                ax.annotate(f'Peak\n{months[i%len(months)]}\n({point[0]}, {point[1]})', (point[0], point[1]), textcoords="offset points", xytext=(0,10), ha='center')
-            for i, point in enumerate(significant_troughs):
-                ax.annotate(f'Trough\n{months[i%len(months)]}\n({point[0]}, {point[1]})', (point[0], point[1]), textcoords="offset points", xytext=(0,-15), ha='center')
-        
-        st.pyplot(fig)
+        fig.add_trace(go.Scatter(x=data_points[:, 0], y=data_points[:, 1], mode='lines', name='Extracted Points'))
+        fig.add_trace(go.Scatter(x=significant_peaks[:, 0], y=significant_peaks[:, 1], mode='markers+text', text=[f'Peak {months[i%len(months)]}' for i in range(len(significant_peaks))], textposition='top center', name='Significant Peaks'))
+        fig.add_trace(go.Scatter(x=significant_troughs[:, 0], y=significant_troughs[:, 1], mode='markers+text', text=[f'Trough {months[i%len(months)]}' for i in range(len(significant_troughs))], textposition='bottom center', name='Significant Troughs'))
+        fig.add_trace(go.Scatter(x=data_points[:, 0], y=trend_line, mode='lines', name='Trend Line', line=dict(dash='dash')))
+        fig.add_trace(go.Scatter(x=data_points[window_size-1:, 0], y=moving_average, mode='lines', name='Moving Average', line=dict(color='orange')))
 
-        # Display the summary in a text box
+        fig.update_layout(title='Annotated Graph', xaxis_title='X-axis', yaxis_title='Y-axis', legend_title='Legend')
+        fig.update_yaxes(autorange='reversed')
+
+        st.plotly_chart(fig)
+
+        # Display the summary in a markdown text box
         summary = f"""
 ### Graph Interpretation Summary
 
