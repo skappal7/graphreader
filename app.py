@@ -9,12 +9,41 @@ import re
 from scipy import stats
 
 def extract_text_and_data(image):
-    # [This function remains unchanged]
-    pass
+    text = pytesseract.image_to_string(image)
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        data_points = np.array([point[0] for point in largest_contour])
+        data_points = data_points[data_points[:, 0].argsort()]
+        
+        date_pattern = r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b'
+        dates = re.findall(date_pattern, text)
+        
+        return text, data_points, dates
+    
+    return text, None, []
 
 def map_data_to_dates(data_points, dates):
-    # [This function remains unchanged]
-    pass
+    if len(dates) < 2:
+        return None
+    
+    start_date = datetime.strptime(dates[0], '%b %Y')
+    end_date = datetime.strptime(dates[-1], '%b %Y')
+    date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
+    
+    x_min, x_max = data_points[:, 0].min(), data_points[:, 0].max()
+    x_range = x_max - x_min
+    
+    mapped_data = []
+    for i, date in enumerate(date_range):
+        x_pos = x_min + (i / (len(date_range) - 1)) * x_range
+        closest_point = data_points[np.argmin(np.abs(data_points[:, 0] - x_pos))]
+        mapped_data.append((date, closest_point[1]))
+    
+    return pd.DataFrame(mapped_data, columns=['Date', 'Value'])
 
 def calculate_trend(values):
     x = np.arange(len(values))
@@ -98,7 +127,48 @@ def generate_insights(df):
     return insights
 
 def color_text(text, words_to_color, color):
-    # [This function remains unchanged]
-    pass
+    for word in words_to_color:
+        text = text.replace(word, f'<span style="color:{color}">{word}</span>')
+    return text
 
-# [The rest of the Streamlit app code remains largely unchanged]
+st.title("Enhanced Graph Interpreter with OCR")
+
+# Color pickers in sidebar
+st.sidebar.header("Customize Colors")
+positive_color = st.sidebar.color_picker("Pick a color for positive trends", "#FF0000")
+negative_color = st.sidebar.color_picker("Pick a color for negative trends", "#00FF00")
+
+# Optional table display
+show_table = st.sidebar.checkbox("Show data table", False)
+
+uploaded_file = st.file_uploader("Upload a graph image", type=["png", "jpg", "jpeg"])
+
+if uploaded_file is not None:
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Uploaded Graph', use_column_width=True)
+    
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    
+    text, data_points, dates = extract_text_and_data(image)
+    
+    if data_points is not None and dates:
+        df = map_data_to_dates(data_points, dates)
+        
+        if df is not None:
+            insights = generate_insights(df)
+            
+            st.write("### Graph Interpretation Summary")
+            for insight, words_to_color in insights:
+                colored_text = color_text(insight, words_to_color, positive_color if any(word in ["increasing", "highest", "above", "increase"] for word in words_to_color) else negative_color)
+                st.markdown(colored_text, unsafe_allow_html=True)
+            
+            if show_table:
+                st.write("### Extracted Data")
+                st.dataframe(df)
+        else:
+            st.write("Could not map data points to dates. Please check the image quality.")
+    else:
+        st.write("Could not extract data points or dates from the image. Please try a different image.")
+else:
+    st.write("Please upload an image to begin analysis.")
