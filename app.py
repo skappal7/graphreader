@@ -121,7 +121,8 @@ def generate_insights(df):
         insights.append((f"Outliers detected in {len(outliers)} months: {', '.join(outlier_info)}", ["outliers"]))
 
     # Correlation with time
-    time_correlation = df['Value'].corr(pd.to_numeric(df.index))
+    df['Time'] = range(len(df))  # Create a numeric representation of time
+    time_correlation = df['Value'].corr(df['Time'])
     insights.append((f"The correlation between values and time is {time_correlation:.2f}, indicating a {abs(time_correlation):.2f} {'strong' if abs(time_correlation) > 0.7 else 'moderate' if abs(time_correlation) > 0.5 else 'weak'} {overall_trend} trend.", ["correlation"]))
 
     return insights
